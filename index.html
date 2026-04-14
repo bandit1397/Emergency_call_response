@@ -105,8 +105,8 @@ async function createRequest(){
         hospitals: state.hospitals.map(h => ({
           name: h.name,
           email: h.email,
-          okLink: `https://hook.eu1.make.com/병원응답웹훅?requestID=${encodeURIComponent(state.requestID)}&hospital=${encodeURIComponent(h.name)}&response=가능`,
-          noLink: `https://hook.eu1.make.com/병원응답웹훅?requestID=${encodeURIComponent(state.requestID)}&hospital=${encodeURIComponent(h.name)}&response=불가`
+          okLink: `https://hook.eu1.make.com/bx5t6eskiv87rrmwxoyiity304xji3qe?requestID=${encodeURIComponent(state.requestID)}&hospital=${encodeURIComponent(h.name)}&response=가능`,
+          noLink: `https://hook.eu1.make.com/bx5t6eskiv87rrmwxoyiity304xji3qe?requestID=${encodeURIComponent(state.requestID)}&hospital=${encodeURIComponent(h.name)}&response=불가`
         }))
       })
     });
