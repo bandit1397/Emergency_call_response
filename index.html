@@ -3,153 +3,94 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>경찰 상황실 – 응급환자 수용 현황</title>
+<title>병원 응급수용 알림판</title>
 <style>
-body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",Arial;background:#0f172a;color:#e5e7eb}
-header{background:#020617;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
-header h1{font-size:1.1rem;margin:0}
-main{padding:16px}.card{background:#020617;border-radius:10px;padding:14px;margin-bottom:12px}
-.row{display:flex;gap:12px;flex-wrap:wrap}.field{flex:1 1 200px}
-label{font-size:.8rem;color:#94a3b8}
-input{width:100%;padding:8px;border-radius:6px;border:1px solid #334155;background:#020617;color:#e5e7eb}
-button{padding:10px 14px;border-radius:8px;border:none;cursor:pointer;font-size:.95rem}
-.btn-primary{background:#2563eb;color:white}.btn-danger{background:#b91c1c;color:white}
-.hosp{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #1e293b}
-.status-ok{color:#22c55e;font-weight:700}.status-wait{color:#facc15}.status-no{color:#ef4444;font-weight:700}
-.log{background:#020617;border-radius:8px;padding:10px;font-family:monospace;font-size:.8rem;max-height:240px;overflow:auto}
-.small{font-size:.75rem;color:#94a3b8}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",Arial;background:#0f172a;color:#e5e7eb;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.wrap{width:min(900px,95vw)}
+.card{background:#020617;border-radius:18px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+h1{margin:0 0 8px;font-size:2rem}.sub{color:#94a3b8;margin-bottom:20px}
+.req{display:none;background:#111827;border:1px solid #334155;border-radius:16px;padding:24px;margin-top:16px}
+.req.active{display:block;animation:fade .3s ease}
+.row{margin:10px 0;font-size:1.15rem}.label{color:#94a3b8}
+.btns{display:flex;gap:16px;margin-top:24px}
+button{flex:1;padding:18px;border:none;border-radius:14px;font-size:1.2rem;font-weight:700;cursor:pointer}
+.ok{background:#16a34a;color:#fff}.no{background:#dc2626;color:#fff}
+.status{margin-top:16px;color:#facc15}.idle{padding:40px;text-align:center;color:#94a3b8;font-size:1.2rem}
+@keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
-<header>
-  <h1>🚓 경찰 상황실 – 응급환자 수용 현황</h1>
-  <div id="clock"></div>
-</header>
-<main>
-<div class="card">
-  <div class="row">
-    <div class="field"><label>요청 ID</label><input id="reqId" placeholder="REQ-자동생성"></div>
-    <div class="field"><label>환자 요약</label><input id="summary" placeholder="예: 60대 남성, 의식저하"></div>
-    <div class="field"><label>ETA</label><input id="eta" placeholder="예: 5분"></div>
+<div class="wrap">
+  <div class="card">
+    <h1>🏥 응급환자 수용 문의 알림판</h1>
+    <div class="sub">병원 PC에서 항상 켜두세요. 새 요청이 오면 자동 팝업됩니다.</div>
+    <div id="idle" class="idle">현재 대기 중입니다.</div>
+    <div id="reqBox" class="req">
+      <div class="row"><span class="label">요청 ID:</span> <span id="reqId"></span></div>
+      <div class="row"><span class="label">환자 상태:</span> <span id="summary"></span></div>
+      <div class="row"><span class="label">도착 예상:</span> <span id="eta"></span></div>
+      <div class="btns">
+        <button class="ok" onclick="sendResponse('가능')">수용 가능</button>
+        <button class="no" onclick="sendResponse('불가')">수용 불가</button>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
   </div>
-  <div class="row" style="margin-top:10px">
-    <div class="field" style="flex:2"><label>병원 목록 (쉼표 구분)</label><input id="hospInput" placeholder="A병원,B병원,C센터"></div>
-    <div class="field" style="flex:1;align-self:flex-end"><button class="btn-primary" onclick="createRequest()">요청 발송</button></div>
-  </div>
-  <div class="small" style="margin-top:6px">※ Live Server / 배포 URL(http/https)에서 실행하세요.</div>
 </div>
-<div class="card"><h3>병원 응답 현황</h3><div id="hospList"></div></div>
-<div class="card"><h3>상황 로그</h3><div class="log" id="log"></div></div>
-</main>
+<audio id="alarm" preload="auto">
+  <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
+</audio>
 <script>
-const MAKE_WEBHOOK_REQUEST = "https://hook.eu1.make.com/g5ayxloab4v1x4dxf4zr8ruk7mca5lnp";
-const SHEET_API_URL = "https://opensheet.elk.sh/1EEsd2nzWRlD9F41ipwn9fTYEsqJJlTgNZy3PDAxtKno/시트1";
-const HOSPITAL_CONTACTS = {"A병원":"bandit1397@gmail.com",
-                           "B병원":"bandit1@police.go.kr"
-                          };
-const state = { requestID:'', summary:'', eta:'', hospitals:[] };
-const logEl = document.getElementById('log');
-const clockEl = document.getElementById('clock');
+const HOSPITAL_NAME = new URLSearchParams(location.search).get('hospital') || 'A병원';
+const SHEET_API_URL = 'https://opensheet.elk.sh/1EEsd2nzWRlD9F41ipwn9fTYEsqJJlTgNZy3PDAxtKno/시트1';
+const RESPONSE_WEBHOOK = 'https://hook.eu1.make.com/yrvh6doutwop0gdo73uq1lpfbvx8s851';
+let currentReq = null;
+let answered = new Set(JSON.parse(localStorage.getItem('answeredReqs')||'[]'));
 
-function log(msg){
-  const t = new Date().toLocaleTimeString();
-  logEl.innerText = `[${t}] ${msg}\n` + logEl.innerText;
-}
-
-function render(){
-  const el = document.getElementById('hospList');
-  el.innerHTML = '';
-  state.hospitals.forEach(h=>{
-    const d = document.createElement('div');
-    d.className = 'hosp';
-    const cls = h.response === '가능' ? 'status-ok' : h.response === '불가' ? 'status-no' : 'status-wait';
-    d.innerHTML = `<div>${h.name}</div><div class="${cls}">${h.response || '대기중'}</div>`;
-    el.appendChild(d);
-  });
-}
-
-async function createRequest(){
-  if (location.protocol === 'file:') {
-    alert('file:// 로 열면 요청이 차단될 수 있습니다. Live Server 또는 배포 URL로 실행하세요.');
-    return;
-  }
-
-  state.requestID = document.getElementById('reqId').value.trim() || `REQ-${Date.now()}`;
-  state.summary = document.getElementById('summary').value.trim();
-  state.eta = document.getElementById('eta').value.trim();
-  state.hospitals = document.getElementById('hospInput').value
-    .split(',')
-    .map(h => h.trim())
-    .filter(Boolean)
-    .map(name => ({
-      name,
-      email: HOSPITAL_CONTACTS[name] || '',
-      response: null
-    }));
-
-  if (!state.hospitals.length) {
-    alert('병원명을 1개 이상 입력하세요.');
-    return;
-  }
-
-  render();
-
-  try {
-    const res = await fetch(MAKE_WEBHOOK_REQUEST, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestID: state.requestID,
-        summary: state.summary,
-        eta: state.eta,
-        hospitals: state.hospitals.map(h => ({
-          name: h.name,
-          email: h.email,
-          okLink: `https://hook.eu1.make.com/yrvh6doutwop0gdo73uq1lpfbvx8s851?requestID=${encodeURIComponent(state.requestID)}&hospital=${encodeURIComponent(h.name)}&response=가능`,
-          noLink: `https://hook.eu1.make.com/yrvh6doutwop0gdo73uq1lpfbvx8s851?requestID=${encodeURIComponent(state.requestID)}&hospital=${encodeURIComponent(h.name)}&response=불가`
-        }))
-      })
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    log(`요청 발송 완료 (${state.requestID})`);
-  } catch (e) {
-    console.error(e);
-    log(`요청 발송 실패: ${e.message}`);
-  }
-}
-
-async function fetchResponses(){
-  if (!state.requestID) return;
-
-  try {
+async function checkRequests(){
+  try{
     const res = await fetch(SHEET_API_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
     const data = await res.json();
+    const pending = data.reverse().find(r => r.hospital === HOSPITAL_NAME && r.requestID && !answered.has(r.requestID));
+    if(pending && (!currentReq || currentReq.requestID !== pending.requestID)){
+      showPopup(pending);
+    }
+  }catch(e){console.error(e)}
+}
 
-    data
-      .filter(row => row.requestID === state.requestID)
-      .forEach(row => {
-        const target = state.hospitals.find(h => h.name === row.hospital);
-        if (target && target.response !== row.response) {
-          target.response = row.response;
-          log(`${row.hospital} 응답 수신 → ${row.response}`);
-        }
-      });
+function showPopup(req){
+  currentReq = req;
+  document.getElementById('idle').style.display='none';
+  document.getElementById('reqBox').classList.add('active');
+  document.getElementById('reqId').innerText = req.requestID;
+  document.getElementById('summary').innerText = req.summary || '-';
+  document.getElementById('eta').innerText = req.eta || '-';
+  document.getElementById('status').innerText = '새 요청이 도착했습니다.';
+  document.getElementById('alarm').play().catch(()=>{});
+  alert('응급환자 수용 문의가 도착했습니다.');
+}
 
-    render();
-  } catch (e) {
-    console.error(e);
-    log(`응답 조회 실패: ${e.message}`);
+async function sendResponse(response){
+  if(!currentReq) return;
+  const url = `${RESPONSE_WEBHOOK}?requestID=${encodeURIComponent(currentReq.requestID)}&hospital=${encodeURIComponent(HOSPITAL_NAME)}&response=${encodeURIComponent(response)}`;
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error();
+    answered.add(currentReq.requestID);
+    localStorage.setItem('answeredReqs', JSON.stringify([...answered]));
+    document.getElementById('status').innerText = `응답 완료: ${response}`;
+    setTimeout(()=>{
+      document.getElementById('reqBox').classList.remove('active');
+      document.getElementById('idle').style.display='block';
+      currentReq = null;
+    },1500);
+  }catch(e){
+    document.getElementById('status').innerText = '응답 전송 실패';
   }
 }
 
-setInterval(() => {
-  clockEl.innerText = new Date().toLocaleString();
-}, 1000);
-
-setInterval(fetchResponses, 30000);
+checkRequests();
+setInterval(checkRequests, 5000);
 </script>
 </body>
 </html>
