@@ -70,7 +70,7 @@ function stopBlink(){
   document.title = "병원 응급수용 알림판";
 }
 
-// 🔊 강제 반복 알람
+// 🔊 알람
 function startAlarm(){
   const alarm = document.getElementById('alarm');
   alarm.currentTime = 0;
@@ -87,7 +87,7 @@ async function checkRequests(){
     const res = await fetch(SHEET_API_URL);
     const data = await res.json();
 
-    // ✅ 최초 실행 시 기존 데이터 모두 무시
+    // 최초 실행시 기존 데이터 무시
     if(!initialized){
       data.forEach(r => {
         if(r.requestID){
@@ -103,14 +103,21 @@ async function checkRequests(){
 
     const pending = data.reverse().find(r => {
       if(!r.requestID) return false;
+      if(r.hospital !== HOSPITAL_NAME) return false;
+      if(answered.has(r.requestID)) return false;
 
-      const reqTime = new Date(r.timestamp || r.time || 0).getTime();
+      // 🔥 핵심 수정
+      if(!r.timestamp && !r.time){
+        return true; // 시간 없으면 통과
+      }
 
-      return (
-        r.hospital === HOSPITAL_NAME &&
-        (now - reqTime < 5 * 60 * 1000) && // ✅ 5분 이내 요청만
-        !answered.has(r.requestID)
-      );
+      const reqTime = new Date(r.timestamp || r.time).getTime();
+
+      if(isNaN(reqTime)){
+        return true; // 시간 형식 이상도 통과
+      }
+
+      return (now - reqTime < 5 * 60 * 1000);
     });
 
     if(pending && (!currentReq || currentReq.requestID !== pending.requestID)){
