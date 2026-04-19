@@ -49,6 +49,7 @@ const RESPONSE_WEBHOOK = 'https://hook.eu1.make.com/yrvh6doutwop0gdo73uq1lpfbvx8
 
 let currentReq = null;
 let answered = new Set(JSON.parse(localStorage.getItem('answeredReqs')||'[]'));
+let initialized = false;
 
 // 🔔 알림 권한 요청
 if (Notification.permission !== "granted") {
@@ -85,16 +86,40 @@ async function checkRequests(){
   try{
     const res = await fetch(SHEET_API_URL);
     const data = await res.json();
-    const pending = data.reverse().find(r => 
-      r.hospital === HOSPITAL_NAME && 
-      r.requestID && 
-      !answered.has(r.requestID)
-    );
+
+    // ✅ 최초 실행 시 기존 데이터 모두 무시
+    if(!initialized){
+      data.forEach(r => {
+        if(r.requestID){
+          answered.add(r.requestID);
+        }
+      });
+      localStorage.setItem('answeredReqs', JSON.stringify([...answered]));
+      initialized = true;
+      return;
+    }
+
+    const now = Date.now();
+
+    const pending = data.reverse().find(r => {
+      if(!r.requestID) return false;
+
+      const reqTime = new Date(r.timestamp || r.time || 0).getTime();
+
+      return (
+        r.hospital === HOSPITAL_NAME &&
+        (now - reqTime < 5 * 60 * 1000) && // ✅ 5분 이내 요청만
+        !answered.has(r.requestID)
+      );
+    });
 
     if(pending && (!currentReq || currentReq.requestID !== pending.requestID)){
       showPopup(pending);
     }
-  }catch(e){console.error(e)}
+
+  }catch(e){
+    console.error(e);
+  }
 }
 
 function showPopup(req){
@@ -108,10 +133,8 @@ function showPopup(req){
   document.getElementById('eta').innerText = req.eta || '-';
   document.getElementById('status').innerText = '새 요청이 도착했습니다.';
 
-  // 🔊 소리 반복
   startAlarm();
 
-  // 🔔 윈도우 알림
   if (Notification.permission === "granted") {
     new Notification("🚑 응급환자 수용 요청", {
       body: `${req.summary} / 도착 ${req.eta}`,
@@ -119,7 +142,6 @@ function showPopup(req){
     });
   }
 
-  // 🟥 제목 깜빡임
   startBlink();
 
   alert('응급환자 수용 문의가 도착했습니다.');
@@ -139,10 +161,7 @@ async function sendResponse(response){
 
     document.getElementById('status').innerText = `응답 완료: ${response}`;
 
-    // 🔊 소리 중지
     stopAlarm();
-
-    // 🟥 깜빡임 중지
     stopBlink();
 
     setTimeout(()=>{
