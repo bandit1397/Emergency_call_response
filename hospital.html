@@ -51,6 +51,9 @@ let currentReq = null;
 let answered = new Set(JSON.parse(localStorage.getItem('answeredReqs')||'[]'));
 let initialized = false;
 
+// ✅ 🔥 추가된 핵심 (중복 요청 방지)
+let isChecking = false;
+
 // 🔔 알림 권한 요청
 if (Notification.permission !== "granted") {
   Notification.requestPermission();
@@ -82,7 +85,13 @@ function stopAlarm(){
   alarm.currentTime = 0;
 }
 
+// 🚨 핵심 수정된 부분 (중복 실행 방지 포함)
 async function checkRequests(){
+
+  // 🔥 중복 실행 차단
+  if(isChecking) return;
+  isChecking = true;
+
   try{
     const res = await fetch(SHEET_API_URL);
     const data = await res.json();
@@ -106,15 +115,14 @@ async function checkRequests(){
       if(r.hospital !== HOSPITAL_NAME) return false;
       if(answered.has(r.requestID)) return false;
 
-      // 🔥 핵심 수정
       if(!r.timestamp && !r.time){
-        return true; // 시간 없으면 통과
+        return true;
       }
 
       const reqTime = new Date(r.timestamp || r.time).getTime();
 
       if(isNaN(reqTime)){
-        return true; // 시간 형식 이상도 통과
+        return true;
       }
 
       return (now - reqTime < 5 * 60 * 1000);
@@ -126,6 +134,9 @@ async function checkRequests(){
 
   }catch(e){
     console.error(e);
+  } finally {
+    // 🔥 반드시 해제 (중요)
+    isChecking = false;
   }
 }
 
