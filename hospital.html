@@ -189,8 +189,8 @@ async function sendResponse(response){
   // 🔥 Firebase 데이터 삭제 (중요)
   db.ref('emergency/' + HOSPITAL_NAME).remove();
 
-  const url = `${RESPONSE_WEBHOOK}?requestID=${encodeURIComponent(currentReq.requestID)}&hospital=${encodeURIComponent(HOSPITAL_NAME)}&response=${encodeURIComponent(response)}`;
-
+  const SECRET = "knpckybm1!";  // 👉 아무거나 직접 정하세요 (예: 경찰123!)
+  const url = `${RESPONSE_WEBHOOK}?requestID=${encodeURIComponent(currentReq.requestID)}&hospital=${encodeURIComponent(HOSPITAL_NAME)}&response=${encodeURIComponent(response)}&secret=${SECRET}`;
   try{
     const res = await fetch(url);
     if(!res.ok) throw new Error();
