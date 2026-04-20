@@ -42,27 +42,7 @@ button{flex:1;padding:18px;border:none;border-radius:14px;font-size:1.2rem;font-
   <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
 </audio>
 
-<!-- 🔥 Firebase 라이브러리 -->
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
 <script>
-// 🔥 Firebase 설정 (수동 추가)
-const firebaseConfig = {
-  apiKey:"AIzaSyContXVIufn0mQoo-X4lqj7H0RLqsb7WKo",
-  authDomain: "emergency-system-6171b.firebaseapp.com",
-  databaseURL: "https://emergency-system-6171b-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "emergency-system-6171b",
-  storageBucket: "emergency-system-6171b.firebasestorage.app",
-  messagingSenderId: "363695544029",
-  appId: "1:363695544029:web:fc76f48395a81407746d34"
-};
-
-// 🔥 Firebase 초기화
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
-// 기존 코드 유지
 const HOSPITAL_NAME = new URLSearchParams(location.search).get('hospital') || 'A병원';
 const SHEET_API_URL = 'https://opensheet.elk.sh/1EEsd2nzWRlD9F41ipwn9fTYEsqJJlTgNZy3PDAxtKno/시트1';
 const RESPONSE_WEBHOOK = 'https://hook.eu1.make.com/yrvh6doutwop0gdo73uq1lpfbvx8s851';
@@ -71,12 +51,12 @@ let currentReq = null;
 let answered = new Set(JSON.parse(localStorage.getItem('answeredReqs')||'[]'));
 let initialized = false;
 
-// 🔔 알림 권한
+// 🔔 알림 권한 요청
 if (Notification.permission !== "granted") {
   Notification.requestPermission();
 }
 
-// 깜빡임
+// 🟥 제목 깜빡임
 let blinkInterval = null;
 function startBlink(){
   let flag = false;
@@ -90,7 +70,7 @@ function stopBlink(){
   document.title = "병원 응급수용 알림판";
 }
 
-// 알람
+// 🔊 알람
 function startAlarm(){
   const alarm = document.getElementById('alarm');
   alarm.currentTime = 0;
@@ -102,23 +82,12 @@ function stopAlarm(){
   alarm.currentTime = 0;
 }
 
-// 🔥 Firebase 실시간 감지 (추가)
-db.ref('emergency/' + HOSPITAL_NAME).on('value', snapshot => {
-  const data = snapshot.val();
-
-  if(data){
-    if(!currentReq || currentReq.requestID !== data.requestID){
-      showPopup(data);
-    }
-  }
-});
-
-// 기존 polling 유지
 async function checkRequests(){
   try{
     const res = await fetch(SHEET_API_URL);
     const data = await res.json();
 
+    // 최초 실행시 기존 데이터 무시
     if(!initialized){
       data.forEach(r => {
         if(r.requestID){
@@ -137,14 +106,15 @@ async function checkRequests(){
       if(r.hospital !== HOSPITAL_NAME) return false;
       if(answered.has(r.requestID)) return false;
 
+      // 🔥 핵심 수정
       if(!r.timestamp && !r.time){
-        return true;
+        return true; // 시간 없으면 통과
       }
 
       const reqTime = new Date(r.timestamp || r.time).getTime();
 
       if(isNaN(reqTime)){
-        return true;
+        return true; // 시간 형식 이상도 통과
       }
 
       return (now - reqTime < 5 * 60 * 1000);
@@ -174,7 +144,8 @@ function showPopup(req){
 
   if (Notification.permission === "granted") {
     new Notification("🚑 응급환자 수용 요청", {
-      body: `${req.summary} / 도착 ${req.eta}`
+      body: `${req.summary} / 도착 ${req.eta}`,
+      icon: "https://cdn-icons-png.flaticon.com/512/2967/2967350.png"
     });
   }
 
@@ -186,11 +157,8 @@ function showPopup(req){
 async function sendResponse(response){
   if(!currentReq) return;
 
-  // 🔥 Firebase 데이터 삭제 (중요)
-  db.ref('emergency/' + HOSPITAL_NAME).remove();
+  const url = `${RESPONSE_WEBHOOK}?requestID=${encodeURIComponent(currentReq.requestID)}&hospital=${encodeURIComponent(HOSPITAL_NAME)}&response=${encodeURIComponent(response)}`;
 
-  const SECRET = "knpckybm1!";  // 👉 아무거나 직접 정하세요 (예: 경찰123!)
-  const url = `${RESPONSE_WEBHOOK}?requestID=${encodeURIComponent(currentReq.requestID)}&hospital=${encodeURIComponent(HOSPITAL_NAME)}&response=${encodeURIComponent(response)}&secret=${SECRET}`;
   try{
     const res = await fetch(url);
     if(!res.ok) throw new Error();
@@ -214,10 +182,8 @@ async function sendResponse(response){
   }
 }
 
-// 기존 polling 유지
 checkRequests();
 setInterval(checkRequests, 5000);
-
 </script>
 </body>
 </html>
